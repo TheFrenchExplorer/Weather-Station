@@ -3,4 +3,4 @@ Fork of the weather Station by lfpoulain x Declic by Peugeot  (https://github.co
 
 # Disclaimer
 The following lines will be in French.
-Translation will come after yhe project completion
+Translation will come after the project completion
