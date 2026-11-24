@@ -64,11 +64,12 @@ bool hasBME = false;
 BH1750 lightMeter;       // I2C
 bool hasBH1750 = false;
 
-volatile uint32_t anemoPulseCount = 0; // ISR incremented
+// Suppression de l'anémomètre
+/*volatile uint32_t anemoPulseCount = 0; // ISR incremented
 volatile uint32_t anemoLastMicros = 0; // for simple debounce
 uint32_t lastWindowStart = 0;
 uint32_t lastWindowPulses = 0;
-float lastPulsesPerSec = 0.0f;
+float lastPulsesPerSec = 0.0f;*/
 
 // Rain calibration (ADC raw). Lower -> wet, Higher -> dry
 uint16_t RAIN_DRY_RAW = 3500;
