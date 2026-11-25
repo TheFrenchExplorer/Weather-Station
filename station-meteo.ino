@@ -4,7 +4,6 @@
   Sensors:
     - BME280 (I2C) for temperature, humidity, pressure
     - BH1750FVI (I2C) for ambient light (lux)
-    - Anemometer (reed switch) on GPIO with interrupt
     - LM393-based digital sensor (e.g., rain/sound/vibration) on GPIO
 
   Web UI:
@@ -28,7 +27,7 @@
 #include "web_pages.h"
 
 // ========= WiFi config =========
-const char* WIFI_SSID = "You_SSID";      // TODO: set SSID
+const char* WIFI_SSID = "Your_SSID";      // TODO: set SSID
 const char* WIFI_PASSWORD = "Your_password";  // TODO: set password
 
 // ========= Pin assignments =========
@@ -64,13 +63,6 @@ bool hasBME = false;
 BH1750 lightMeter;       // I2C
 bool hasBH1750 = false;
 
-// Suppression de l'anémomètre
-/*volatile uint32_t anemoPulseCount = 0; // ISR incremented
-volatile uint32_t anemoLastMicros = 0; // for simple debounce
-uint32_t lastWindowStart = 0;
-uint32_t lastWindowPulses = 0;
-float lastPulsesPerSec = 0.0f;*/
-
 // Rain calibration (ADC raw). Lower -> wet, Higher -> dry
 uint16_t RAIN_DRY_RAW = 3500;
 uint16_t RAIN_WET_RAW = 800;
@@ -91,42 +83,12 @@ uint8_t UI_LIGHT_ORANGE_MIN = 30;
 
 Preferences prefs;
 
-// ========= ISR =========
-void IRAM_ATTR anemoISR() {
-  uint32_t now = micros();
-  // basic debounce (~3 ms) to mitigate reed bounce
-  if (now - anemoLastMicros > 3000) {
-    anemoPulseCount++;
-    anemoLastMicros = now;
-  }
-}
-
 // ========= Utility: safe JSON number =========
 String jsonNumber(float v) {
   if (isnan(v)) return "null";
   String s; s.reserve(16);
   s += String(v, 2);
   return s;
-}
-
-// ========= Sensor reading helpers =========
-void updateAnemoWindow() {
-  uint32_t now = millis();
-  uint32_t elapsed = now - lastWindowStart;
-  if (elapsed >= ANEMO_WINDOW_MS) {
-    uint32_t pulses = anemoPulseCount;
-    uint32_t pulsesInWindow = pulses - lastWindowPulses;
-    float seconds = (float)elapsed / 1000.0f;
-    lastPulsesPerSec = (seconds > 0.0f) ? (pulsesInWindow / seconds) : 0.0f;
-    lastWindowStart = now;
-    lastWindowPulses = pulses;
-  }
-}
-
-float computeWindSpeedMps(float pulsesPerSec) {
-  if (ANEMO_PULSES_PER_ROTATION <= 0.0f) return NAN;
-  float rps = pulsesPerSec / ANEMO_PULSES_PER_ROTATION;
-  return rps * ANEMO_MPS_PER_ROTATION;
 }
 
 // ========= Web assets =========
@@ -158,7 +120,6 @@ void handleAdvancedPage() {
 
 void handleApiSensors() {
   server.sendHeader("Cache-Control", "no-store");
-  updateAnemoWindow();
 
   float t = NAN, h = NAN, p = NAN;
   if (hasBME) {
@@ -208,11 +169,6 @@ void handleApiSensors() {
     }
   }
 
-  float pps = lastPulsesPerSec;
-  float mps = computeWindSpeedMps(pps);
-  float rpm = (ANEMO_PULSES_PER_ROTATION > 0.0f) ? (pps / ANEMO_PULSES_PER_ROTATION) * 60.0f : NAN;
-  float kmh = isnan(mps) ? NAN : (mps * 3.6f);
-
   String json;
   json.reserve(512);
   json += F("{");
@@ -224,12 +180,6 @@ void handleApiSensors() {
   json += F("\"lm393_analog\":"); if (lm393_a < 0) json += F("null"); else json += String(lm393_a); json += ',';
   json += F("\"lm393_voltage_v\":"); json += jsonNumber(lm393_v); json += ',';
   json += F("\"lm393_percent\":"); json += jsonNumber(lm393_pct);
-  json += F(",\"wind\":{");
-  json += F("\"pulses\":"); json += String(anemoPulseCount); json += ',';
-  json += F("\"pulses_per_sec\":"); json += jsonNumber(pps); json += ',';
-  json += F("\"rpm\":"); json += jsonNumber(rpm); json += ',';
-  json += F("\"speed_mps\":"); json += jsonNumber(mps); json += ',';
-  json += F("\"speed_kmh\":"); json += jsonNumber(kmh);
   json += F("}}");
   server.send(200, "application/json; charset=utf-8", json);
 }
@@ -370,8 +320,6 @@ void setup() {
   Serial.println(F("Booting Weather Station..."));
 
   // Pins
-  if (ANEMO_PULLUP) pinMode(ANEMOMETER_PIN, INPUT_PULLUP); else pinMode(ANEMOMETER_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ANEMOMETER_PIN), anemoISR, FALLING);
 
   if (LM393_POWER_PIN >= 0) {
     pinMode(LM393_POWER_PIN, OUTPUT);
@@ -434,9 +382,6 @@ void setup() {
   server.begin();
   Serial.println(F("HTTP server started"));
 
-  lastWindowStart = millis();
-  lastWindowPulses = 0;
-
   // Load persisted UI thresholds and calibration data
   prefs.begin("ui", true);
   UI_RAIN_GREEN_MIN = prefs.getUChar("rgm", UI_RAIN_GREEN_MIN);
@@ -459,7 +404,6 @@ void setup() {
 // ========= Loop =========
 void loop() {
   server.handleClient();
-  updateAnemoWindow();
 
   wifi_mode_t mode = WiFi.getMode();
   bool staActive = (mode == WIFI_MODE_STA) || (mode == WIFI_MODE_APSTA);
