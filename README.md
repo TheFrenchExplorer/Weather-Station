@@ -4,3 +4,6 @@ Fork of the weather Station by lfpoulain x Declic by Peugeot  (https://github.co
 # Disclaimer
 The following lines will be in French.
 Translation will come after the project completion
+
+# Anémomètre
+L'anémomètre ne sera pas utilisé. Retrait des lignes de codes 
